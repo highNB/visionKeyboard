@@ -6,14 +6,17 @@ import math
 #영상 크기 조정
 WIDTH = 640
 HEIGHT = 480
-cap2 = cv2.VideoCapture(2) #상단 카메라
-cap2.set(3,WIDTH) 
-cap2.set(4,HEIGHT)
 
 #피부 경계값
-skin_lower = np.array([0,140,90])
-skin_upper = np.array([255,173,157])
+skin_lower = np.array([0,140,100])
+skin_upper = np.array([255,190,200])
 kernel = np.ones((5,5),np.uint8)
+
+
+cap2 = cv2.VideoCapture(2) #상단 카메라
+cap2.set(cv2.CAP_PROP_FOURCC,cv2.VideoWriter_fourcc('M','J','P','G'))
+cap2.set(3,WIDTH) 
+cap2.set(4,HEIGHT)
 
 #임시 키보드 좌표 고정
 aextBot = [625, 260]
@@ -42,7 +45,6 @@ handBoundMax = 500
 #검사할 손
 targetHand = 0
 pastDetectResult = False
-
 
 
 def distanceBetweenTwoPoints(start, end):
@@ -288,7 +290,6 @@ while(True):
     break
 
     
-kernel = np.ones((5,5),np.uint8)
 
 while(True):
     ret, src = cap1.read()    
@@ -300,8 +301,10 @@ while(True):
         
     # BGR -> YCrCb 변환
     YCrCb = cv2.cvtColor(dst,cv2.COLOR_BGR2YCrCb)
+    
     # 피부 검출
-    mask_hand = cv2.inRange(YCrCb,np.array([0,145,90]),np.array([255,173,157]))
+    mask_hand = cv2.inRange(YCrCb,skin_lower,skin_upper)
+    
     # 피부 색 나오도록 연산
     mask_color = cv2.bitwise_and(dst,dst,mask=mask_hand)
     #cv2.imshow("mask_color",mask_color) 
@@ -359,6 +362,7 @@ while(True):
 cap1.release()
 cap2.release()
 cv2.destroyAllWindows()
+
 
 
 
