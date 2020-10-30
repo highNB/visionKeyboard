@@ -5,7 +5,6 @@ import imutils
 import copy
 import math
 
-
 #constant
 
 WIDTH = 640
