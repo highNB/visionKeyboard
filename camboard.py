@@ -16,6 +16,8 @@ keyset = [[b'ec',b'ec',b'`',b'`',b'1',b'1',b'2',b'2',b'3',b'3',b'4',b'4',b'5',b'
 WIDTH = 640
 HEIGHT = 480
 
+KEYBOARDDELAY = 3
+
 CROP_HEIGHT_START_PERCENTAGE = 50
 CROP_HEIGHT_END_PERCENTAGE = 100
 CROP_WIDTH_START_PERCENTAGE = 15
@@ -23,7 +25,7 @@ CROP_WIDTH_END_PERCENTAGE = 85
 
 #table height, error range
 TABLE_HEIGHT = 278
-ERROR_RANGE = 5
+ERROR_RANGE = 8
 
 #피부 경계값
 skin_lower = np.array([0,150,100])
@@ -38,16 +40,15 @@ hep = (int)(HEIGHT*CROP_HEIGHT_END_PERCENTAGE/100)
 wsp = (int)(WIDTH*CROP_WIDTH_START_PERCENTAGE/100)
 wep = (int)(WIDTH*CROP_WIDTH_END_PERCENTAGE/100)
 
-cam2 = cv2.VideoCapture(2) #2nd floor cam
+cam2 = cv2.VideoCapture(0) #2nd floor cam
 cam2.set(cv2.CAP_PROP_FOURCC,cv2.VideoWriter_fourcc('M','J','P','G'))
 cam2.set(3,WIDTH) 
 cam2.set(4,HEIGHT)
 
-cam1 = cv2.VideoCapture(0) #1st floor cam
+cam1 = cv2.VideoCapture(2) #1st floor cam
 cam1.set(cv2.CAP_PROP_FOURCC,cv2.VideoWriter_fourcc('M','J','P','G'))
 cam1.set(3,WIDTH) 
 cam1.set(4,HEIGHT)
-
 
 
 #---varible---
@@ -94,23 +95,27 @@ def getTransformMatrix(image):
     #aextTop += [0,-OFFSET]
     #aextBot += [0,OFFSET]
     pts1 = np.float32([aextBot,aextLeft,aextRight,aextTop])
-    print(pts1)
+    #print(pts1)
     pts2 = np.float32([[0,0],[WIDTH,0],[0,HEIGHT],[WIDTH,HEIGHT]])
     matrix = cv2.getPerspectiveTransform(pts1,pts2)
     return matrix
     
 def getTableHeight(image):
-    src = image.copy()    
+    global tHeight
+    src = image.copy()
     gray = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY)
     
     canny = cv2.Canny(gray, 150, 300, 7)
     lines = cv2.HoughLinesP(canny, 0.8, np.pi / 180, 90, minLineLength = 100, maxLineGap = 10)
-    print(lines)
+    #print(lines)
     if lines is not None:
         for i in lines:
-            tableEdgeHeight = int((lines[0][0][1] + lines[0][0][3])/2)
-            print(tableEdgeHeight)
-    return tableEdgeHeight
+            tHeight = int((lines[0][0][1] + lines[0][0][3])/2)
+            print(tHeight)
+            return tHeight
+    else:
+        print('can\'t find table')
+        return TABLE_HEIGHT
     
 def detectInput(image):
     global pastInputState
@@ -120,11 +125,11 @@ def detectInput(image):
     
     if((not(pastInputState))and(threshsum>INPUT_THRESHOLD)):
         pastInputState = True
-        print('on')
+        #print('on')
         return 1
     elif((pastInputState)and(threshsum<INPUT_THRESHOLD)):
         pastInputState = False
-        print('off')
+        #print('off')
         return 2
     else:
         return 0
@@ -142,7 +147,7 @@ def getPoint(image):
     image = dctSkin(image)
     image = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
     thresh = cv2.threshold(image, 45, 255, cv2.THRESH_BINARY)[1]
-    cv2.imshow('crop_and_mask2',thresh)
+    #cv2.imshow('crop_and_mask2',thresh)
     cnts = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL,
                             cv2.CHAIN_APPROX_SIMPLE)
     cnts = imutils.grab_contours(cnts)
@@ -151,47 +156,62 @@ def getPoint(image):
         extTop = tuple(c[c[:, :, 1].argmin()][0])
         return extTop
     else:
-        return 0
+        return 0,0
 
 def calcKey(posW, posH):
+    if((posW == 0)and(posH ==0)):
+        return 0
     imageDivW = int((31*posW/WIDTH))
-    imageDivH = int((6*posH/HEIGHT))
-    print('------------------------------')
-    print('width = ', posW, 'height = ', posH)
-    print('W = ', imageDivW+1, 'th block, H = ', imageDivH+1, 'th block')
-    print('your key = ', keyset[imageDivH][imageDivW])
-    ser.write(keyset[imageDivH][imageDivW])
-    
+    imageDivH = int((5*posH/HEIGHT))
+    #print('------------------------------')
+    #print('width = ', posW, 'height = ', posH)
+    #print('W = ', imageDivW+1, 'th block, H = ', imageDivH+1, 'th block')
+    #print('your key = ', keyset[imageDivH][imageDivW])
+    #ser.write(keyset[imageDivH][imageDivW])
+    return keyset[imageDivH][imageDivW]
 #----setting----
 ser = serial.Serial('/dev/ttyUSB0', 9600, timeout=1)
     
 while(True):
     ret, image2 = cam2.read()
     ret, image1 = cam1.read()
-    
+    #cv2.imshow('image1',image1)
+    #cv2.imshow('image2',image2)
     tHight = getTableHeight(image1)
+    cv2.imshow('setting',image1)
     
     if ((tHight <= TABLE_HEIGHT+ERROR_RANGE)and(tHight >= TABLE_HEIGHT-ERROR_RANGE)):
         matrix = getTransformMatrix(image2)
         cv2.destroyAllWindows()
         print('ready')
         break
+    cv2.waitKey(1)
 
 #----loop----   
 while(True):
     ret, image2 = cam2.read()
     ret, image1 = cam1.read()
-    cv2.imshow('image1',image1)
-    cv2.imshow('image2',image2)
+    #cv2.imshow('image1',image1)
+    #cv2.imshow('image2',image2)
+    
+    image_gray2 = cv2.cvtColor(image2,cv2.COLOR_BGR2GRAY)
+    image_edge2 = cv2.Canny(image_gray2, 30, 50, 7)
+    #cv2.imshow('edge',image_edge2)
     
     image2 = affineTransformImage(image2,matrix)
-    cv2.imshow('crop',image2)
+    #cv2.imshow('crop',image2)
     
     if(detectInput(image1) == 1): #keyboard on
+        cv2.waitKey(KEYBOARDDELAY)
         #print(getPoint(image2))
         x,y = getPoint(image2)
         if((x<WIDTH+1)and(y<HEIGHT+1)):
-            calcKey(x,y)
+            a = calcKey(x,y)
+            ser.write(a)
+            if(a == b'ec'):
+                print('end program')
+                break
+            print(a)
         else:
             print('confirm size')
         
@@ -200,10 +220,12 @@ while(True):
     else: # nothing happened
         pass
     
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        cv2.destroyAllWindows()
-        cam2.release()
-        break
+    #if cv2.waitKey(1) & 0xFF == ord('q'):
+    #    cv2.destroyAllWindows()
+    #    cam2.release()
+     #   break
+
+
 
 
 
